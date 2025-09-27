@@ -1,17 +1,20 @@
-FROM openjdk:8-jre-alpine
-
-# Instalar curl para health checks
-RUN apk add --no-cache curl
+# Build stage
+FROM maven:3.9.6-eclipse-temurin-17 AS build
 
 WORKDIR /app
 
-# Copiar JAR construido
-COPY target/users-api-*.jar app.jar
+COPY pom.xml .
+COPY src ./src
 
-EXPOSE 8083
+RUN mvn clean package -DskipTests
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=60s \
-  CMD curl -f http://localhost:8083/users/ || exit 1
+# Run stage
+FROM eclipse-temurin:17-jre-alpine
+
+WORKDIR /app
+
+COPY --from=build /app/target/*.jar app.jar
+
+EXPOSE 8081
 
 ENTRYPOINT ["java", "-jar", "app.jar"]

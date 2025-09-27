@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth-api
+      - users-api
+      - todos-api
+      - zipkin
+
+  auth-api:
+    build: ./auth-api
+    ports:
+      - "8000:8000"
+
+  users-api:
+    build: ./users-api
+    ports:
+      - "8081:8081"
+
+  todos-api:
+    build: ./todos-api
+    ports:
+      - "8082:8082"
+
+  log-message-processor:
+    build: ./log-message-processor
+
+  zipkin:
+    image: openzipkin/zipkin:2.24
+    ports:
+      - "9411:9411"

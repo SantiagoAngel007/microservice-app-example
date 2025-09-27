@@ -1,23 +1,25 @@
-FROM golang:1.21-alpine AS builder
-
-RUN apk add --no-cache git ca-certificates
+FROM golang:1.18 AS build
 
 WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
+
+COPY go.mod go.sum* ./
+RUN go mod tidy
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o auth-api .
 
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates curl
-WORKDIR /root/
+RUN go build -o auth-api
 
-COPY --from=builder /app/auth-api .
+FROM gcr.io/distroless/base-debian11
+
+WORKDIR /app
+
+COPY --from=build /app/auth-api .
+
+ENV AUTH_API_PORT=8000
+ENV USERS_API_ADDRESS=http://users-api:8083
+ENV JWT_SECRET=myfancysecret
+ENV ZIPKIN_URL=http://zipkin:9411/api/v2/spans
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=30s \
-  CMD curl -f http://localhost:8000/version || exit 1
-
-CMD ["./auth-api"]
+ENTRYPOINT ["./auth-api"]
