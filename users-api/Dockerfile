@@ -1,20 +1,30 @@
-# Build stage
-FROM maven:3.9.6-eclipse-temurin-17 AS build
-
+FROM maven:3.8.7-eclipse-temurin-8 AS build
 WORKDIR /app
 
+# Copiar pom.xml y descargar dependencias primero (cacheo eficiente)
 COPY pom.xml .
-COPY src ./src
+RUN mvn dependency:go-offline -B
 
+# Copiar el código fuente y compilar
+COPY src ./src
 RUN mvn clean package -DskipTests
 
-# Run stage
-FROM eclipse-temurin:17-jre-alpine
-
+# ---------- Etapa 2: Ejecución ----------
+FROM eclipse-temurin:8-jre
 WORKDIR /app
 
-COPY --from=build /app/target/*.jar app.jar
+# Copiar el jar construido desde la etapa anterior
+COPY --from=build /app/target/users-api-0.0.1-SNAPSHOT.jar app.jar
 
+# Variables de entorno para Spring Boot
+ENV JWT_SECRET=samuelangelsecret
+ENV SERVER_PORT=8081
+ENV SPRING_APPLICATION_NAME=users-api
+ENV SPRING_ZIPKIN_BASEURL=http://zipkin:9411/api/v2/spans
+ENV SPRING_SLEUTH_SAMPLER_PERCENTAGE=100.0
+
+# Exponer el puerto configurado
 EXPOSE 8081
 
+# Comando de arranque
 ENTRYPOINT ["java", "-jar", "app.jar"]
