@@ -117,27 +117,22 @@ jobs:
 
       - name: Build & Push Docker Images
         run: |
-          # Frontend
           docker build -t ${{ secrets.DOCKER_USERNAME }}/frontend:${{ github.sha }} ./frontend
           docker push ${{ secrets.DOCKER_USERNAME }}/frontend:${{ github.sha }}
 
-          # Auth API
           docker build -t ${{ secrets.DOCKER_USERNAME }}/auth-api:${{ github.sha }} ./auth-api
           docker push ${{ secrets.DOCKER_USERNAME }}/auth-api:${{ github.sha }}
 
-          # Users API
           docker build -t ${{ secrets.DOCKER_USERNAME }}/users-api:${{ github.sha }} ./users-api
           docker push ${{ secrets.DOCKER_USERNAME }}/users-api:${{ github.sha }}
 
-          # Todos API
           docker build -t ${{ secrets.DOCKER_USERNAME }}/todos-api:${{ github.sha }} ./todos-api
           docker push ${{ secrets.DOCKER_USERNAME }}/todos-api:${{ github.sha }}
 
-          # Log Message Processor
           docker build -t ${{ secrets.DOCKER_USERNAME }}/log-message-processor:${{ github.sha }} ./log-message-processor
           docker push ${{ secrets.DOCKER_USERNAME }}/log-message-processor:${{ github.sha }}
 
-  # 3. Despliegue local con docker-compose
+  # 3. Despliegue local con Docker Compose
   compose-up:
     name: Deploy (docker-compose)
     needs: docker-build-and-push
@@ -147,8 +142,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Docker Compose
+      - name: Ensure Docker Compose plugin is available
         run: |
-          docker-compose down || true
-          docker-compose up -d --build
+          docker compose version
+
+      - name: Deploy stack with Docker Compose
+        run: |
+          docker compose down || true
+          docker compose up -d --build
           echo "Microservice stack is up and running!"
