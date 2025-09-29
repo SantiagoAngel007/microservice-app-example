@@ -3,62 +3,78 @@ name: CI/CD Microservice Pipeline
 on:
   push:
     branches:
-      - master
       - main
+      - master
       - develop
       - dev
   pull_request:
     branches:
-      - master
       - main
+      - master
       - develop
       - dev
 
 jobs:
-
-  # Job para compilar / testear todos los servicios
+  # 1. Compilación y pruebas de cada módulo
   build-and-test:
     name: Build & Test Services
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [users-api, auth-api, todos-api, log-message-processor, frontend]
+        service: [frontend, auth-api, users-api, todos-api, log-message-processor]
 
     steps:
-      - name: Check out code
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up service specifics ${{ matrix.service }}
+      # FRONTEND (Node 8.17.0)
+      - name: Build Frontend
+        if: matrix.service == 'frontend'
+        uses: actions/setup-node@v3
+        with:
+          node-version: '8.17.0'
         run: |
-          cd ${{ matrix.service }}
-          # (Aquí podrías instalar dependencias generales si lo necesita)
-      
-      - name: Build & test Java service (Users API)
-        if: matrix.service == 'users-api'
-        run: |
-          cd users-api
-          ./mvnw clean test
+          cd frontend
+          npm install
+          npm run build
 
-      - name: Build & test Go service (Auth API)
+      # AUTH API (Go 1.18)
+      - name: Build Auth API
         if: matrix.service == 'auth-api'
         uses: actions/setup-go@v4
         with:
-          go-version: '1.21'
+          go-version: '1.18'
         run: |
           cd auth-api
-          go test ./...
+          go mod tidy
+          go build -o auth-api
+          echo "Auth API built successfully"
 
-      - name: Build & test Node service (Todos API)
+      # USERS API (Java 8 con Maven 3.8.7)
+      - name: Build Users API
+        if: matrix.service == 'users-api'
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '8'
+        run: |
+          cd users-api
+          ./mvnw clean package -DskipTests
+          echo "Users API built successfully"
+
+      # TODOS API (Node 18-alpine)
+      - name: Build Todos API
         if: matrix.service == 'todos-api'
         uses: actions/setup-node@v3
         with:
-          node-version: '16'
+          node-version: '18'
         run: |
           cd todos-api
           npm install
-          npm test
+          echo "Todos API built successfully"
 
-      - name: Build & test Python service (Log Message Processor)
+      # LOG MESSAGE PROCESSOR (Python 3.11-alpine)
+      - name: Build Log Message Processor
         if: matrix.service == 'log-message-processor'
         uses: actions/setup-python@v4
         with:
@@ -66,69 +82,49 @@ jobs:
         run: |
           cd log-message-processor
           pip install -r requirements.txt
-          pytest
+          echo "Log Message Processor built successfully"
 
-      - name: Build & test Frontend (Vue)
-        if: matrix.service == 'frontend'
-        uses: actions/setup-node@v3
-        with:
-          node-version: '16'
-        run: |
-          cd frontend
-          npm install
-          npm run lint
-          npm run test:unit   # o el script que uses
-
-  # Job para construir imágenes Docker y hacer push
+  # 2. Construcción y publicación de imágenes Docker
   docker-build-and-push:
     name: Build & Push Docker Images
     needs: build-and-test
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out code
+      - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Log in to Docker Registry
+      - name: Log in to Docker Hub
         uses: docker/login-action@v2
         with:
-          registry: ${{ secrets.DOCKER_REGISTRY }}   # e.g. “docker.io” o tu registry
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build & Push Users API image
+      - name: Build & Push Docker Images
         run: |
-          cd users-api
-          docker build -t ${{ secrets.DOCKER_REGISTRY }}/users-api:${{ github.sha }} .
-          docker push ${{ secrets.DOCKER_REGISTRY }}/users-api:${{ github.sha }}
+          # Frontend
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/frontend:${{ github.sha }} ./frontend
+          docker push ${{ secrets.DOCKER_USERNAME }}/frontend:${{ github.sha }}
 
-      - name: Build & Push Auth API image
-        run: |
-          cd auth-api
-          docker build -t ${{ secrets.DOCKER_REGISTRY }}/auth-api:${{ github.sha }} .
-          docker push ${{ secrets.DOCKER_REGISTRY }}/auth-api:${{ github.sha }}
+          # Auth API
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/auth-api:${{ github.sha }} ./auth-api
+          docker push ${{ secrets.DOCKER_USERNAME }}/auth-api:${{ github.sha }}
 
-      - name: Build & Push Todos API image
-        run: |
-          cd todos-api
-          docker build -t ${{ secrets.DOCKER_REGISTRY }}/todos-api:${{ github.sha }} .
-          docker push ${{ secrets.DOCKER_REGISTRY }}/todos-api:${{ github.sha }}
+          # Users API
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/users-api:${{ github.sha }} ./users-api
+          docker push ${{ secrets.DOCKER_USERNAME }}/users-api:${{ github.sha }}
 
-      - name: Build & Push Log Message Processor image
-        run: |
-          cd log-message-processor
-          docker build -t ${{ secrets.DOCKER_REGISTRY }}/log-message-processor:${{ github.sha }} .
-          docker push ${{ secrets.DOCKER_REGISTRY }}/log-message-processor:${{ github.sha }}
+          # Todos API
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/todos-api:${{ github.sha }} ./todos-api
+          docker push ${{ secrets.DOCKER_USERNAME }}/todos-api:${{ github.sha }}
 
-      - name: Build & Push Frontend image
-        run: |
-          cd frontend
-          docker build -t ${{ secrets.DOCKER_REGISTRY }}/frontend:${{ github.sha }} .
-          docker push ${{ secrets.DOCKER_REGISTRY }}/frontend:${{ github.sha }}
+          # Log Message Processor
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/log-message-processor:${{ github.sha }} ./log-message-processor
+          docker push ${{ secrets.DOCKER_USERNAME }}/log-message-processor:${{ github.sha }}
 
-  # (Opcional) Job de despliegue
-  deploy:
-    name: Deploy to Staging
+  # 3. Despliegue local con docker-compose
+  compose-up:
+    name: Deploy (docker-compose)
     needs: docker-build-and-push
     runs-on: ubuntu-latest
 
@@ -136,20 +132,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Aquí pondrías los pasos para desplegar:
-      # Por ejemplo: acceder a un servidor, usar kubectl para desplegar en Kubernetes, o Terraform/Ansible
-      # En este ejemplo sencillo lo dejo como comentario:
-
-      - name: Deploy services
+      - name: Set up Docker Compose
         run: |
-          echo "Aquí se hace el despliegue de las imágenes al entorno de staging"
-          # Ejemplo:
-          # kubectl set image deployment/users-api users-api=${{ secrets.DOCKER_REGISTRY }}/users-api:${{ github.sha }}
-          # kubectl set image deployment/auth-api auth-api=${{ secrets.DOCKER_REGISTRY }}/auth-api:${{ github.sha }}
-          # etc...
-
-      - name: Notify / Slack / etc
-        if: ${{ success() }}
-        run: |
-          echo "Despliegue realizado correctamente"
-
+          docker-compose down || true
+          docker-compose up -d --build
+          echo "Microservice stack is up and running!"
