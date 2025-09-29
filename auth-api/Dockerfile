@@ -16,7 +16,7 @@ WORKDIR /app
 COPY --from=build /app/auth-api .
 
 ENV AUTH_API_PORT=8000
-ENV USERS_API_ADDRESS=http://users-api:8083
+ENV USERS_API_ADDRESS=http://users-api:8081
 ENV JWT_SECRET=samuelangelsecret
 ENV ZIPKIN_URL=http://zipkin:9411/api/v2/spans
 
