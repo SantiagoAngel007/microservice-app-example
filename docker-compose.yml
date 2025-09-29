@@ -1,0 +1,68 @@
+version: '3.9'
+
+services:
+  # Servicio Redis
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+
+  # Servicio de autenticación
+  auth-api:
+    build: ./auth-api
+    container_name: auth-api
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - microservice-net
+
+  # Servicio de usuarios
+  users-api:
+    build: ./users-api
+    container_name: users-api
+    ports:
+      - "8083:8083"
+    networks:
+      - microservice-net
+
+  # Servicio de tareas (todos)
+  todos-api:
+    build: ./todos-api
+    container_name: todos-api
+    ports:
+      - "8082:8082"
+    networks:
+      - microservice-net
+
+  # Procesador de logs (usa Redis)
+  log-message-processor:
+    build: ./log-message-processor
+    container_name: log-message-processor
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_CHANNEL=logs
+    depends_on:
+      - redis
+    networks:
+      - microservice-net
+
+  # Frontend (Vue.js con Nginx)
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - auth-api
+      - users-api
+      - todos-api
+    networks:
+      - microservice-net
+
+networks:
+  microservice-net:
+    driver: bridge
